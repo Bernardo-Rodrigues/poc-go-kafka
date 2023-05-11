@@ -14,7 +14,7 @@ func NewProductRepositoryMySql(db *sql.DB) *ProductRepositoryMySql {
 }
 
 func (repository *ProductRepositoryMySql) Create(product *entity.Product) error {
-	_, err := repository.DB.Exec("Insert into product (id, name, price) values(?,?,?)",
+	_, err := repository.DB.Exec("Insert into products (id, name, price) values(?,?,?)",
 		product.ID, product.Name, product.Price)
 	if err != nil {
 		return err

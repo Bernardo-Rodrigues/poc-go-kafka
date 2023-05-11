@@ -3,29 +3,47 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"net/http"
+
 	"test/internal/infra/akafka"
 	"test/internal/infra/repository"
+	"test/internal/infra/web"
 	"test/internal/usecase"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/go-chi/chi/v5"
+
+	_ "github.com/go-sql-driver/mysql"
 )
 
 func main() {
-	db, err := sql.Open("mysql", "root:root@tcp(host.docker.internal):3306/products")
+	db, err := sql.Open("mysql", "root:root@tcp(host.docker.internal:3306)/products")
 	if err != nil {
 		panic(err)
 	}
 	defer db.Close()
 
-	msgChan := make(chan *kafka.Message)
-	go akafka.Consume([]string{"products"}, "host.docker.internal:9094", msgChan)
-
 	repository := repository.NewProductRepositoryMySql(db)
-	createProductUseCase := usecase.NewCreateProductUseCase(repository)
+	createProductUsecase := usecase.NewCreateProductUseCase(repository)
+	listProductsUsecase := usecase.NewListProductsUseCase(repository)
+
+	productHandlers := web.NewProductHandlers(createProductUsecase, listProductsUsecase)
+
+	r := chi.NewRouter()
+	r.Post("/products", productHandlers.CreateProductHandler)
+	r.Get("/products", productHandlers.ListProductsHandler)
+
+	go http.ListenAndServe(":8000", r)
+
+	msgChan := make(chan *kafka.Message)
+	go akafka.Consume([]string{"product"}, "host.docker.internal:9094", msgChan)
 
 	for msg := range msgChan {
 		dto := usecase.CreateProductInputDto{}
-		json.Unmarshal(msg.Value, &dto)
-		_, err = createProductUseCase.Execute(dto)
+		err := json.Unmarshal(msg.Value, &dto)
+		if err != nil {
+			// logar o erro
+		}
+		_, err = createProductUsecase.Execute(dto)
 	}
 }
